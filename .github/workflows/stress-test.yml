@@ -3,7 +3,6 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: postgres:15
@@ -18,50 +17,40 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - name: Install Dependencies
         run: npm ci
-
       - name: Generate Prisma Client
         run: npx prisma generate
-
       - name: Run Migrations and Seed Data
         env:
           DATABASE_URL: postgres://test_user:test_password@localhost:5432/wallet_test
         run: |
           npm run db:migrate
           npm run db:seed -- --balance=100.00 # Conta Origem inicia com R$ 100
-
       - name: Start Wallet API
         env:
           DATABASE_URL: postgres://test_user:test_password@localhost:5432/wallet_test
           PORT: 3000
         run: npm start &
-
       - name: Wait for API to be ready
         run: npx wait-on http://localhost:3000/health --timeout 30000
-
       - name: Install k6 (Load Testing Tool)
         run: |
-          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          curl -s https://dl.k6.io/key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
           sudo apt-get update
           sudo apt-get install -y k6
-
       - name: Execute 100 Concurrent Requests Test
         env:
           BASE_URL: http://localhost:3000
         run: k6 run src/tests/stress.js
-
       - name: Assert Data Integrity
         env:
           DATABASE_URL: postgres://test_user:test_password@localhost:5432/wallet_test
